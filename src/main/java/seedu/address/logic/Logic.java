@@ -7,7 +7,7 @@ import seedu.address.commons.core.GuiSettings;
 import seedu.address.logic.commands.CommandResult;
 import seedu.address.logic.commands.exceptions.CommandException;
 import seedu.address.logic.parser.exceptions.ParseException;
-import seedu.address.model.ReadOnlyAddressBook;
+import seedu.address.model.ReadOnlyClubTrack;
 import seedu.address.model.person.Person;
 
 /**
@@ -26,17 +26,22 @@ public interface Logic {
     /**
      * Returns the AddressBook.
      *
-     * @see seedu.address.model.Model#getAddressBook()
+     * @see seedu.address.model.Model#getClubTrack()
      */
-    ReadOnlyAddressBook getAddressBook();
+    ReadOnlyClubTrack getAddressBook();
 
-    /** Returns an unmodifiable view of the filtered list of persons */
+    /** Returns an unmodifiable view of the filtered list of members */
     ObservableList<Person> getFilteredPersonList();
 
     /**
      * Returns the user prefs' address book file path.
      */
     Path getAddressBookFilePath();
+
+    /**
+     * Returns the user prefs' club track file path.
+     */
+    Path getClubTrackFilePath();
 
     /**
      * Returns the user prefs' GUI settings.
@@ -47,4 +52,5 @@ public interface Logic {
      * Set the user prefs' GUI settings.
      */
     void setGuiSettings(GuiSettings guiSettings);
+
 }

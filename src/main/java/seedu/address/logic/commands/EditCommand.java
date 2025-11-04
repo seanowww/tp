@@ -3,9 +3,11 @@ package seedu.address.logic.commands;
 import static java.util.Objects.requireNonNull;
 import static seedu.address.logic.parser.CliSyntax.PREFIX_ADDRESS;
 import static seedu.address.logic.parser.CliSyntax.PREFIX_EMAIL;
+import static seedu.address.logic.parser.CliSyntax.PREFIX_FACULTY;
 import static seedu.address.logic.parser.CliSyntax.PREFIX_NAME;
 import static seedu.address.logic.parser.CliSyntax.PREFIX_PHONE;
 import static seedu.address.logic.parser.CliSyntax.PREFIX_TAG;
+import static seedu.address.logic.parser.CliSyntax.PREFIX_YEAROFSTUDY;
 import static seedu.address.model.Model.PREDICATE_SHOW_ALL_PERSONS;
 
 import java.util.Collections;
@@ -26,7 +28,7 @@ import seedu.address.model.person.Email;
 import seedu.address.model.person.Name;
 import seedu.address.model.person.Person;
 import seedu.address.model.person.Phone;
-import seedu.address.model.tag.Tag;
+import seedu.address.model.person.Tag;
 
 /**
  * Edits the details of an existing person in the address book.
@@ -42,15 +44,18 @@ public class EditCommand extends Command {
             + "[" + PREFIX_NAME + "NAME] "
             + "[" + PREFIX_PHONE + "PHONE] "
             + "[" + PREFIX_EMAIL + "EMAIL] "
+            + "[" + PREFIX_YEAROFSTUDY + "YEAR] "
+            + "[" + PREFIX_FACULTY + "FACULTY] "
             + "[" + PREFIX_ADDRESS + "ADDRESS] "
             + "[" + PREFIX_TAG + "TAG]...\n"
             + "Example: " + COMMAND_WORD + " 1 "
             + PREFIX_PHONE + "91234567 "
             + PREFIX_EMAIL + "johndoe@example.com";
 
-    public static final String MESSAGE_EDIT_PERSON_SUCCESS = "Edited Person: %1$s";
+    public static final String MESSAGE_EDIT_PERSON_SUCCESS = "Edited Member: %1$s";
     public static final String MESSAGE_NOT_EDITED = "At least one field to edit must be provided.";
     public static final String MESSAGE_DUPLICATE_PERSON = "This person already exists in the address book.";
+
 
     private final Index index;
     private final EditPersonDescriptor editPersonDescriptor;
@@ -79,6 +84,24 @@ public class EditCommand extends Command {
         Person personToEdit = lastShownList.get(index.getZeroBased());
         Person editedPerson = createEditedPerson(personToEdit, editPersonDescriptor);
 
+        // If phone is being changed, ensure no other person already uses the same phone number
+        if (editPersonDescriptor.getPhone().isPresent()) {
+            for (Person existing : model.getClubTrack().getPersonList()) {
+                if (!existing.equals(personToEdit) && existing.getPhone().equals(editedPerson.getPhone())) {
+                    throw new CommandException(MESSAGE_DUPLICATE_PERSON);
+                }
+            }
+        }
+
+        // If email is being changed, ensure no other person already uses the same email
+        if (editPersonDescriptor.getEmail().isPresent()) {
+            for (Person existing : model.getClubTrack().getPersonList()) {
+                if (!existing.equals(personToEdit) && existing.getEmail().equals(editedPerson.getEmail())) {
+                    throw new CommandException(MESSAGE_DUPLICATE_PERSON);
+                }
+            }
+        }
+
         if (!personToEdit.isSamePerson(editedPerson) && model.hasPerson(editedPerson)) {
             throw new CommandException(MESSAGE_DUPLICATE_PERSON);
         }
@@ -98,10 +121,40 @@ public class EditCommand extends Command {
         Name updatedName = editPersonDescriptor.getName().orElse(personToEdit.getName());
         Phone updatedPhone = editPersonDescriptor.getPhone().orElse(personToEdit.getPhone());
         Email updatedEmail = editPersonDescriptor.getEmail().orElse(personToEdit.getEmail());
+        int updatedYearOfStudy = editPersonDescriptor.getYearOfStudy().orElse(personToEdit.getYearOfStudy());
+        String updatedFaculty = editPersonDescriptor.getFaculty().orElse(personToEdit.getFaculty());
         Address updatedAddress = editPersonDescriptor.getAddress().orElse(personToEdit.getAddress());
         Set<Tag> updatedTags = editPersonDescriptor.getTags().orElse(personToEdit.getTags());
 
-        return new Person(updatedName, updatedPhone, updatedEmail, updatedAddress, updatedTags);
+        return new Person(updatedName, updatedPhone, updatedEmail, updatedYearOfStudy,
+            updatedFaculty, updatedAddress, updatedTags,
+            personToEdit.isPresent(), personToEdit.getPoints());
+    }
+
+    /**
+     * Converts a string to title case: first letter of each word capitalized, other letters lower-cased.
+     * Words are split on whitespace.
+     */
+    private static String toTitleCase(String input) {
+        String trimmed = input == null ? "" : input.trim();
+        if (trimmed.isEmpty()) {
+            return trimmed;
+        }
+        String[] parts = trimmed.toLowerCase().split("\\s+");
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; i < parts.length; i++) {
+            String word = parts[i];
+            if (word.isEmpty()) {
+                continue;
+            }
+            char first = Character.toUpperCase(word.charAt(0));
+            String rest = word.length() > 1 ? word.substring(1) : "";
+            if (result.length() > 0) {
+                result.append(' ');
+            }
+            result.append(first).append(rest);
+        }
+        return result.toString();
     }
 
     @Override
@@ -136,6 +189,8 @@ public class EditCommand extends Command {
         private Name name;
         private Phone phone;
         private Email email;
+        private String faculty;
+        private Integer yearOfStudy;
         private Address address;
         private Set<Tag> tags;
 
@@ -149,6 +204,8 @@ public class EditCommand extends Command {
             setName(toCopy.name);
             setPhone(toCopy.phone);
             setEmail(toCopy.email);
+            setYearOfStudy(toCopy.yearOfStudy);
+            setFaculty(toCopy.faculty);
             setAddress(toCopy.address);
             setTags(toCopy.tags);
         }
@@ -157,7 +214,7 @@ public class EditCommand extends Command {
          * Returns true if at least one field is edited.
          */
         public boolean isAnyFieldEdited() {
-            return CollectionUtil.isAnyNonNull(name, phone, email, address, tags);
+            return CollectionUtil.isAnyNonNull(name, phone, email, yearOfStudy, faculty, address, tags);
         }
 
         public void setName(Name name) {
@@ -182,6 +239,22 @@ public class EditCommand extends Command {
 
         public Optional<Email> getEmail() {
             return Optional.ofNullable(email);
+        }
+
+        public void setYearOfStudy(Integer yearOfStudy) {
+            this.yearOfStudy = yearOfStudy;
+        }
+
+        public Optional<Integer> getYearOfStudy() {
+            return Optional.ofNullable(yearOfStudy);
+        }
+
+        public void setFaculty(String faculty) {
+            this.faculty = faculty;
+        }
+
+        public Optional<String> getFaculty() {
+            return Optional.ofNullable(faculty);
         }
 
         public void setAddress(Address address) {
@@ -224,6 +297,8 @@ public class EditCommand extends Command {
             return Objects.equals(name, otherEditPersonDescriptor.name)
                     && Objects.equals(phone, otherEditPersonDescriptor.phone)
                     && Objects.equals(email, otherEditPersonDescriptor.email)
+                    && Objects.equals(yearOfStudy, otherEditPersonDescriptor.yearOfStudy)
+                    && Objects.equals(faculty, otherEditPersonDescriptor.faculty)
                     && Objects.equals(address, otherEditPersonDescriptor.address)
                     && Objects.equals(tags, otherEditPersonDescriptor.tags);
         }
@@ -234,6 +309,8 @@ public class EditCommand extends Command {
                     .add("name", name)
                     .add("phone", phone)
                     .add("email", email)
+                    .add("year of study", yearOfStudy)
+                    .add("faculty", faculty)
                     .add("address", address)
                     .add("tags", tags)
                     .toString();

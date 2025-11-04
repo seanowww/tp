@@ -1,3 +1,4 @@
+StorageClassDiagram.puml:
 @startuml
 !include style.puml
 skinparam arrowThickness 1.1
@@ -14,14 +15,13 @@ Class JsonUserPrefsStorage
 Class "<<interface>>\nStorage" as Storage
 Class StorageManager
 
-package "AddressBook Storage" #F4F6F6{
-Class "<<interface>>\nAddressBookStorage" as AddressBookStorage
-Class JsonAddressBookStorage
-Class JsonSerializableAddressBook
+package "ClubTrack Storage" #F4F6F6{
+Class "<<interface>>\nClubTrackStorage" as AddressBookStorage
+Class JsonClubTrackStorage
+Class JsonSerializableClubTrack
 Class JsonAdaptedPerson
 Class JsonAdaptedTag
 }
-
 }
 
 Class HiddenOutside #FFFFFF
@@ -35,9 +35,15 @@ Storage -left-|> UserPrefsStorage
 Storage -right-|> AddressBookStorage
 
 JsonUserPrefsStorage .up.|> UserPrefsStorage
-JsonAddressBookStorage .up.|> AddressBookStorage
-JsonAddressBookStorage ..> JsonSerializableAddressBook
-JsonSerializableAddressBook --> "*" JsonAdaptedPerson
+JsonClubTrackStorage .up.|> AddressBookStorage
+JsonClubTrackStorage ..> JsonSerializableClubTrack
+JsonSerializableClubTrack --> "*" JsonAdaptedPerson
 JsonAdaptedPerson --> "*" JsonAdaptedTag
 
+note right of JsonClubTrackStorage
+  ClubTrack uses an active list context:
+  data/<LIST_NAME>.json
+  e.g., data/ClubTrack.json, data/freshers.json
+  (resolved by commands like SwitchCommand)
+end note
 @enduml

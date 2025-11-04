@@ -13,8 +13,15 @@ import seedu.address.commons.core.GuiSettings;
  */
 public class UserPrefs implements ReadOnlyUserPrefs {
 
+    // default data file name should be named ClubTrack.json
+    /** The default clubtrack/list base name (without extension). */
+    public static final String DEFAULT_CLUBTRACK_NAME = "ClubTrack";
+
+    /** The default clubtrack file path (data/ClubTrack.json). */
+    public static final Path DEFAULT_CLUBTRACK_PATH = Paths.get("data", DEFAULT_CLUBTRACK_NAME + ".json");
+
     private GuiSettings guiSettings = new GuiSettings();
-    private Path addressBookFilePath = Paths.get("data" , "addressbook.json");
+    private Path addressBookFilePath = DEFAULT_CLUBTRACK_PATH;
 
     /**
      * Creates a {@code UserPrefs} with default values.
@@ -35,7 +42,7 @@ public class UserPrefs implements ReadOnlyUserPrefs {
     public void resetData(ReadOnlyUserPrefs newUserPrefs) {
         requireNonNull(newUserPrefs);
         setGuiSettings(newUserPrefs.getGuiSettings());
-        setAddressBookFilePath(newUserPrefs.getAddressBookFilePath());
+        setAddressBookFilePath(newUserPrefs.getClubTrackFilePath());
     }
 
     public GuiSettings getGuiSettings() {
@@ -47,7 +54,7 @@ public class UserPrefs implements ReadOnlyUserPrefs {
         this.guiSettings = guiSettings;
     }
 
-    public Path getAddressBookFilePath() {
+    public Path getClubTrackFilePath() {
         return addressBookFilePath;
     }
 
@@ -63,11 +70,10 @@ public class UserPrefs implements ReadOnlyUserPrefs {
         }
 
         // instanceof handles nulls
-        if (!(other instanceof UserPrefs)) {
+        if (!(other instanceof UserPrefs otherUserPrefs)) {
             return false;
         }
 
-        UserPrefs otherUserPrefs = (UserPrefs) other;
         return guiSettings.equals(otherUserPrefs.guiSettings)
                 && addressBookFilePath.equals(otherUserPrefs.addressBookFilePath);
     }

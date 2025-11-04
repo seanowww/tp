@@ -6,8 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static seedu.address.logic.Messages.MESSAGE_PERSONS_LISTED_OVERVIEW;
 import static seedu.address.logic.commands.CommandTestUtil.assertCommandSuccess;
 import static seedu.address.testutil.TypicalPersons.CARL;
-import static seedu.address.testutil.TypicalPersons.ELLE;
-import static seedu.address.testutil.TypicalPersons.FIONA;
 import static seedu.address.testutil.TypicalPersons.getTypicalAddressBook;
 
 import java.util.Arrays;
@@ -18,7 +16,7 @@ import org.junit.jupiter.api.Test;
 import seedu.address.model.Model;
 import seedu.address.model.ModelManager;
 import seedu.address.model.UserPrefs;
-import seedu.address.model.person.NameContainsKeywordsPredicate;
+import seedu.address.model.person.predicates.NameContainsKeywordsPredicate;
 
 /**
  * Contains integration tests (interaction with the Model) for {@code FindCommand}.
@@ -30,9 +28,9 @@ public class FindCommandTest {
     @Test
     public void equals() {
         NameContainsKeywordsPredicate firstPredicate =
-                new NameContainsKeywordsPredicate(Collections.singletonList("first"));
+            new NameContainsKeywordsPredicate(Collections.singletonList("first"));
         NameContainsKeywordsPredicate secondPredicate =
-                new NameContainsKeywordsPredicate(Collections.singletonList("second"));
+            new NameContainsKeywordsPredicate(Collections.singletonList("second"));
 
         FindCommand findFirstCommand = new FindCommand(firstPredicate);
         FindCommand findSecondCommand = new FindCommand(secondPredicate);
@@ -56,7 +54,12 @@ public class FindCommandTest {
 
     @Test
     public void execute_zeroKeywords_noPersonFound() {
-        String expectedMessage = String.format(MESSAGE_PERSONS_LISTED_OVERVIEW, 0);
+        String expectedMessage = "No members found! Please recheck your input keywords.\n"
+            + "Examples:\n"
+            + "  find Alice\n"
+            + "  find Computing\n"
+            + "  find Y2\n"
+            + "  find bob@example.com";
         NameContainsKeywordsPredicate predicate = preparePredicate(" ");
         FindCommand command = new FindCommand(predicate);
         expectedModel.updateFilteredPersonList(predicate);
@@ -66,12 +69,67 @@ public class FindCommandTest {
 
     @Test
     public void execute_multipleKeywords_multiplePersonsFound() {
-        String expectedMessage = String.format(MESSAGE_PERSONS_LISTED_OVERVIEW, 3);
-        NameContainsKeywordsPredicate predicate = preparePredicate("Kurz Elle Kunz");
+        // With AND semantics, the previous multi-keyword search that expected three different
+        // people to match is no longer appropriate. Test a single-keyword search instead.
+        String expectedMessage = String.format(MESSAGE_PERSONS_LISTED_OVERVIEW, 1);
+        NameContainsKeywordsPredicate predicate = preparePredicate("Kurz");
         FindCommand command = new FindCommand(predicate);
         expectedModel.updateFilteredPersonList(predicate);
         assertCommandSuccess(command, model, expectedMessage, expectedModel);
-        assertEquals(Arrays.asList(CARL, ELLE, FIONA), model.getFilteredPersonList());
+        assertEquals(Arrays.asList(CARL), model.getFilteredPersonList());
+    }
+
+    @Test
+    public void execute_caseInsensitiveYearOfStudyKeywords_personFound() {
+        // Assuming TypicalPersons contains at least 1 person with yearOfStudy==2
+        NameContainsKeywordsPredicate predicateUpper = preparePredicate("Y2");
+        FindCommand commandUpper = new FindCommand(predicateUpper);
+        expectedModel.updateFilteredPersonList(predicateUpper);
+        assertCommandSuccess(commandUpper, model,
+                String.format(MESSAGE_PERSONS_LISTED_OVERVIEW, expectedModel.getFilteredPersonList().size()),
+                expectedModel);
+        expectedModel.updateFilteredPersonList(p -> true);
+
+        NameContainsKeywordsPredicate predicateLower = preparePredicate("y2");
+        FindCommand commandLower = new FindCommand(predicateLower);
+        expectedModel.updateFilteredPersonList(predicateLower);
+        assertCommandSuccess(commandLower, model,
+                String.format(MESSAGE_PERSONS_LISTED_OVERVIEW, expectedModel.getFilteredPersonList().size()),
+                expectedModel);
+    }
+
+    @Test
+    public void execute_invalidSpelling_noPersonFoundWithMessage() {
+        String input = "YeaarTwo";
+        String expectedMessage = "No members found! Please recheck your input keywords.\n"
+            + "Examples:\n"
+            + "  find Alice\n"
+            + "  find Computing\n"
+            + "  find Y2\n"
+            + "  find bob@example.com";
+
+        NameContainsKeywordsPredicate predicate = preparePredicate(input);
+        FindCommand command = new FindCommand(predicate);
+        expectedModel.updateFilteredPersonList(predicate);
+        assertCommandSuccess(command, model, expectedMessage, expectedModel);
+    }
+
+    @Test
+    public void execute_emailAndFacultySearch_personFound() {
+        NameContainsKeywordsPredicate emailPredicate = preparePredicate("alice@example.com");
+        FindCommand emailCommand = new FindCommand(emailPredicate);
+        expectedModel.updateFilteredPersonList(emailPredicate);
+        assertCommandSuccess(emailCommand, model,
+                String.format(MESSAGE_PERSONS_LISTED_OVERVIEW, expectedModel.getFilteredPersonList().size()),
+                expectedModel);
+        expectedModel.updateFilteredPersonList(p -> true);
+
+        NameContainsKeywordsPredicate facultyPredicate = preparePredicate("School of Computing");
+        FindCommand facultyCommand = new FindCommand(facultyPredicate);
+        expectedModel.updateFilteredPersonList(facultyPredicate);
+        assertCommandSuccess(facultyCommand, model,
+                String.format(MESSAGE_PERSONS_LISTED_OVERVIEW, expectedModel.getFilteredPersonList().size()),
+                expectedModel);
     }
 
     @Test
@@ -89,3 +147,4 @@ public class FindCommandTest {
         return new NameContainsKeywordsPredicate(Arrays.asList(userInput.split("\\s+")));
     }
 }
+

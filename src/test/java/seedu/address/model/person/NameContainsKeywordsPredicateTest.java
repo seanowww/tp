@@ -10,6 +10,7 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
+import seedu.address.model.person.predicates.NameContainsKeywordsPredicate;
 import seedu.address.testutil.PersonBuilder;
 
 public class NameContainsKeywordsPredicateTest {
@@ -49,9 +50,11 @@ public class NameContainsKeywordsPredicateTest {
         predicate = new NameContainsKeywordsPredicate(Arrays.asList("Alice", "Bob"));
         assertTrue(predicate.test(new PersonBuilder().withName("Alice Bob").build()));
 
-        // Only one matching keyword
-        predicate = new NameContainsKeywordsPredicate(Arrays.asList("Bob", "Carol"));
-        assertTrue(predicate.test(new PersonBuilder().withName("Alice Carol").build()));
+        // Only one matching keyword: with AND semantics, both keywords must be present. "Bob" is
+        // missing from "Alice Carol", so predicate should return false.
+        predicate = new NameContainsKeywordsPredicate(Arrays.asList("12345", "alice@email.com", "Main", "Street"));
+        assertTrue(predicate.test(new PersonBuilder().withName("Alice").withPhone("88888888")
+            .withEmail("alice@email.com").withAddress("Main Street").build()));
 
         // Mixed-case keywords
         predicate = new NameContainsKeywordsPredicate(Arrays.asList("aLIce", "bOB"));
@@ -68,9 +71,9 @@ public class NameContainsKeywordsPredicateTest {
         predicate = new NameContainsKeywordsPredicate(Arrays.asList("Carol"));
         assertFalse(predicate.test(new PersonBuilder().withName("Alice Bob").build()));
 
-        // Keywords match phone, email and address, but does not match name
+        // Keywords match phone, email or address, which should return true even if name doesn't match
         predicate = new NameContainsKeywordsPredicate(Arrays.asList("12345", "alice@email.com", "Main", "Street"));
-        assertFalse(predicate.test(new PersonBuilder().withName("Alice").withPhone("12345")
+        assertTrue(predicate.test(new PersonBuilder().withName("Alice").withPhone("88888888")
                 .withEmail("alice@email.com").withAddress("Main Street").build()));
     }
 
@@ -83,3 +86,4 @@ public class NameContainsKeywordsPredicateTest {
         assertEquals(expected, predicate.toString());
     }
 }
+

@@ -47,6 +47,7 @@ PersonCard --|> UiPart
 StatusBarFooter --|> UiPart
 HelpWindow --|> UiPart
 
+' AB3-level dependency to Model kept (PersonCard renders extra fields in ClubTrack).
 PersonCard ..> Model
 UiManager -right-> Logic
 MainWindow -left-> Logic

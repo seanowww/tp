@@ -13,6 +13,7 @@ import seedu.address.model.person.Person;
 public interface Model {
     /** {@code Predicate} that always evaluate to true */
     Predicate<Person> PREDICATE_SHOW_ALL_PERSONS = unused -> true;
+    Predicate<Person> PREDICATE_SHOW_PRESENT_PERSONS = (Person person) -> person.isPresent();
 
     /**
      * Replaces user prefs data with the data in {@code userPrefs}.
@@ -37,20 +38,20 @@ public interface Model {
     /**
      * Returns the user prefs' address book file path.
      */
-    Path getAddressBookFilePath();
+    Path getClubTrackFilePath();
 
     /**
      * Sets the user prefs' address book file path.
      */
-    void setAddressBookFilePath(Path addressBookFilePath);
+    void setClubTrackFilePath(Path addressBookFilePath);
 
     /**
      * Replaces address book data with the data in {@code addressBook}.
      */
-    void setAddressBook(ReadOnlyAddressBook addressBook);
+    void setClubTrack(ReadOnlyClubTrack addressBook);
 
     /** Returns the AddressBook */
-    ReadOnlyAddressBook getAddressBook();
+    ReadOnlyClubTrack getClubTrack();
 
     /**
      * Returns true if a person with the same identity as {@code person} exists in the address book.

@@ -18,7 +18,7 @@ import seedu.address.model.person.Address;
 import seedu.address.model.person.Email;
 import seedu.address.model.person.Name;
 import seedu.address.model.person.Phone;
-import seedu.address.model.tag.Tag;
+import seedu.address.model.person.Tag;
 
 public class ParserUtilTest {
     private static final String INVALID_NAME = "R@chel";
@@ -28,7 +28,7 @@ public class ParserUtilTest {
     private static final String INVALID_TAG = "#friend";
 
     private static final String VALID_NAME = "Rachel Walker";
-    private static final String VALID_PHONE = "123456";
+    private static final String VALID_PHONE = "88888888";
     private static final String VALID_ADDRESS = "123 Main Street #0505";
     private static final String VALID_EMAIL = "rachel@example.com";
     private static final String VALID_TAG_1 = "friend";
@@ -43,8 +43,8 @@ public class ParserUtilTest {
 
     @Test
     public void parseIndex_outOfRangeInput_throwsParseException() {
-        assertThrows(ParseException.class, MESSAGE_INVALID_INDEX, ()
-            -> ParserUtil.parseIndex(Long.toString(Integer.MAX_VALUE + 1)));
+        String maxValuePlusOne = Long.toString(Integer.MAX_VALUE + 1);
+        assertThrows(ParseException.class, MESSAGE_INVALID_INDEX, () -> ParserUtil.parseIndex(maxValuePlusOne));
     }
 
     @Test
@@ -188,9 +188,109 @@ public class ParserUtilTest {
 
     @Test
     public void parseTags_collectionWithValidTags_returnsTagSet() throws Exception {
-        Set<Tag> actualTagSet = ParserUtil.parseTags(Arrays.asList(VALID_TAG_1, VALID_TAG_2));
+        Set<seedu.address.model.person.Tag> actualTagSet =
+                ParserUtil.parseTags(Arrays.asList(VALID_TAG_1, VALID_TAG_2));
         Set<Tag> expectedTagSet = new HashSet<Tag>(Arrays.asList(new Tag(VALID_TAG_1), new Tag(VALID_TAG_2)));
 
         assertEquals(expectedTagSet, actualTagSet);
+    }
+
+    //Helper for generating long strings
+    private static String repeat(char c, int n) {
+        char[] arr = new char[n];
+        Arrays.fill(arr, c);
+        return new String(arr);
+    }
+
+    @Test
+    public void parseYearOfStudy_null_throwsNullPointerException() {
+        assertThrows(NullPointerException.class, () -> ParserUtil.parseYearOfStudy(null));
+    }
+
+    @Test
+    public void parseYearOfStudy_nonInteger_throwsParseException() {
+        assertThrows(ParseException.class, () -> ParserUtil.parseYearOfStudy("two"));
+        assertThrows(ParseException.class, () -> ParserUtil.parseYearOfStudy("2.0"));
+        assertThrows(ParseException.class, () -> ParserUtil.parseYearOfStudy("  1x  "));
+    }
+
+    @Test
+    public void parseYearOfStudy_outOfRange_throwsParseException() {
+        assertThrows(ParseException.class, () -> ParserUtil.parseYearOfStudy("0")); // below min
+        assertThrows(ParseException.class, () -> ParserUtil.parseYearOfStudy("6")); // above max
+    }
+
+    @Test
+    public void parseYearOfStudy_validBounds_success() throws Exception {
+        assertEquals(1, ParserUtil.parseYearOfStudy("1"));
+        assertEquals(5, ParserUtil.parseYearOfStudy("5"));
+        assertEquals(2, ParserUtil.parseYearOfStudy("  2  ")); // trims whitespace
+    }
+
+    @Test
+    public void parseFaculty_null_throwsNullPointerException() {
+        assertThrows(NullPointerException.class, () -> ParserUtil.parseFaculty(null));
+    }
+
+    @Test
+    public void parseFaculty_emptyAfterTrim_throwsParseException() {
+        assertThrows(ParseException.class, () -> ParserUtil.parseFaculty("   "));
+    }
+
+    @Test
+    public void parseFaculty_tooLong_throwsParseException() {
+        String over = repeat('F', ParserUtil.FACULTY_MAX_LEN + 1);
+        assertThrows(ParseException.class, ParserUtil.MESSAGE_FACULTY_TOO_LONG, ()
+                -> ParserUtil.parseFaculty(over));
+    }
+
+    @Test
+    public void parseFaculty_valid_success() throws Exception {
+        assertEquals("SoC", ParserUtil.parseFaculty("SoC"));
+        assertEquals("Business", ParserUtil.parseFaculty("  Business  "));
+    }
+
+    @Test
+    public void parseName_tooLong_throwsParseException() {
+        String over = repeat('a', ParserUtil.NAME_MAX_LEN + 1);
+        assertThrows(ParseException.class, ParserUtil.MESSAGE_NAME_TOO_LONG, ()
+                -> ParserUtil.parseName(over));
+    }
+
+    @Test
+    public void parseName_boundaryAtMax_success() throws Exception {
+        String atMax = repeat('a', ParserUtil.NAME_MAX_LEN);
+        assertEquals(new Name(atMax), ParserUtil.parseName(atMax));
+    }
+
+    @Test
+    public void parseAddress_tooLong_throwsParseException() {
+        String over = repeat('A', ParserUtil.ADDRESS_MAX_LEN + 1);
+        assertThrows(ParseException.class, ParserUtil.MESSAGE_ADDRESS_TOO_LONG, ()
+                -> ParserUtil.parseAddress(over));
+    }
+
+    @Test
+    public void parseAddress_boundaryAtMax_success() throws Exception {
+        String atMax = repeat('B', ParserUtil.ADDRESS_MAX_LEN);
+        assertEquals(new Address(atMax), ParserUtil.parseAddress(atMax));
+    }
+
+    @Test
+    public void parseEmail_tooLong_throwsParseException() {
+        // Build a syntactically valid email that exceeds 254 chars total
+        String domain = "@e.com"; // 6 chars
+        int localLen = ParserUtil.EMAIL_MAX_LEN - domain.length() + 1; // +1 to exceed cap
+        String tooLongEmail = repeat('x', localLen) + domain; // valid form, but exceeds cap
+        assertThrows(ParseException.class, ParserUtil.MESSAGE_EMAIL_TOO_LONG, ()
+                -> ParserUtil.parseEmail(tooLongEmail));
+    }
+
+    @Test
+    public void parseEmail_boundaryAtMax_success() throws Exception {
+        String domain = "@e.com"; // 6 chars
+        int localLen = ParserUtil.EMAIL_MAX_LEN - domain.length(); // exactly at cap
+        String atMaxEmail = repeat('y', localLen) + domain; // syntactically valid and at cap
+        assertEquals(new Email(atMaxEmail), ParserUtil.parseEmail(atMaxEmail));
     }
 }

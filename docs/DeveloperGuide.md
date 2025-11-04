@@ -2,381 +2,961 @@
 layout: page
 title: Developer Guide
 ---
-* Table of Contents
-{:toc}
 
---------------------------------------------------------------------------------------------------------------------
+- [1. Introduction](#1-introduction)
+- [2. Architecture](#2-architecture)
+    - [2.1 Architectural Extension: Switchable Lists](#21-architectural-extension-switchable-lists)
+- [3. UI Component](#3-ui-component)
+- [4. Logic Component](#4-logic-component)
+    - [4.1 Command Execution](#41-command-execution)
+    - [4.2 Parser Class Diagram](#42-parser-class-diagram)
+- [5. Model Component](#5-model-component)
+    - [5.1 Person model](#51-person-model)
+- [6. Storage Component](#6-storage-component)
+- [7. Feature Implementation](#7-feature-implementation)
+    - [7.1 `switch` feature](#71-switch-feature)
+    - [7.2 `add` command (updated)](#72-add-command-updated)
+    - [7.3 `find` vs `search`](#73-find-vs-search)
+    - [7.4 Points features](#74-points-features)
+- [8. Testing and Test Updates](#8-testing-and-test-updates)
+- [9. Editing the data file](#9-editing-the-data-file)
+- [10. Product scope](#10-product-scope)
+- [11. User stories](#11-user-stories)
+- [12. Use cases](#12-use-cases)
+- [13. Non-Functional Requirements](#13-non-functional-requirements)
+- [14. Glossary](#14-glossary)
+- [15. Acknowledgements](#15-acknowledgements)
+- [Appendix A – Instructions for Manual Testing](#appendix-a--instructions-for-manual-testing)
+- [Appendix B – Effort](#appendix-b--effort)
+- [Appendix C – Planned Enhancements](#appendix-c--planned-enhancements)
 
-## **Acknowledgements**
+---
 
-* {list here sources of all reused/adapted ideas, code, documentation, and third-party libraries -- include links to the original source as well}
+<div style="page-break-after: always;"></div>
 
---------------------------------------------------------------------------------------------------------------------
+## 1. Introduction
 
-## **Setting up, getting started**
+This Developer Guide describes the architecture, design, and implementation details of **ClubTrack**, a desktop app for university club executives to manage members, track attendance, and award participation points quickly via a CLI-first workflow.
 
-Refer to the guide [_Setting up and getting started_](SettingUp.md).
+ClubTrack is adapted from **AddressBook Level 3 (AB3)** but extended with:
 
---------------------------------------------------------------------------------------------------------------------
+- compulsory `yearOfStudy` and `faculty` for members,
+- attendance and points tracking,
+- **switchable member lists** (each backed by its own JSON file),
+- clearer separation between `find` (name-only, substring) and `search` (tag-prefix),
+- updated UI (`PersonCard`) to display points and academic info,
+- tighter validation on phone numbers (SG mobile: 8 digits, start with 8 or 9),
+- updated tests to match the new constraints.
 
-## **Design**
+This guide assumes you are familiar with **Java 17**, **JavaFX**, **Gradle**, and the **AB3 architecture**.
 
-<div markdown="span" class="alert alert-primary">
+---
 
-:bulb: **Tip:** The `.puml` files used to create diagrams are in this document `docs/diagrams` folder. Refer to the [_PlantUML Tutorial_ at se-edu/guides](https://se-education.org/guides/tutorials/plantUml.html) to learn how to create and edit diagrams.
-</div>
+## 2. Architecture
 
-### Architecture
+ClubTrack follows the classic AB3 4-layer architecture:
 
-<img src="images/ArchitectureDiagram.png" width="280" />
+1. **UI** – shows data and accepts commands.
+2. **Logic** – parses and executes commands.
+3. **Model** – holds in-memory data and exposes filtered lists to UI.
+4. **Storage** – reads/writes JSON files to disk.
 
-The ***Architecture Diagram*** given above explains the high-level design of the App.
+The entry point is `MainApp`. On startup it:
 
-Given below is a quick overview of main components and how they interact with each other.
+1. loads config / user prefs;
+2. initialises storage;
+3. creates the model;
+4. creates the logic; and
+5. hands control to the UI.
 
-**Main components of the architecture**
+![Architecture Diagram](images/ArchitectureDiagram.png)
 
-**`Main`** (consisting of classes [`Main`](https://github.com/se-edu/addressbook-level3/tree/master/src/main/java/seedu/address/Main.java) and [`MainApp`](https://github.com/se-edu/addressbook-level3/tree/master/src/main/java/seedu/address/MainApp.java)) is in charge of the app launch and shut down.
-* At app launch, it initializes the other components in the correct sequence, and connects them up with each other.
-* At shut down, it shuts down the other components and invokes cleanup methods where necessary.
+### 2.1 Architectural Extension: Switchable Lists
 
-The bulk of the app's work is done by the following four components:
+In AB3, storage always pointed to **one** file (`addressbook.json`).
 
-* [**`UI`**](#ui-component): The UI of the App.
-* [**`Logic`**](#logic-component): The command executor.
-* [**`Model`**](#model-component): Holds the data of the App in memory.
-* [**`Storage`**](#storage-component): Reads data from, and writes data to, the hard disk.
+In ClubTrack, storage can point to **different files** depending on the **active list name**. The default file is:
 
-[**`Commons`**](#common-classes) represents a collection of classes used by multiple other components.
+```tex
+data/ClubTrack.json
+````
 
-**How the architecture components interact with each other**
+Whenever the user runs:
 
-The *Sequence Diagram* below shows how the components interact with each other for the scenario where the user issues the command `delete 1`.
+```tex
+switch Training_2025_10_20
+```
 
-<img src="images/ArchitectureSequenceDiagram.png" width="574" />
+the app starts reading/writing:
 
-Each of the four main components (also shown in the diagram above),
+```tex
+data/Training_2025_10_20.json
+```
 
-* defines its *API* in an `interface` with the same name as the Component.
-* implements its functionality using a concrete `{Component Name}Manager` class (which follows the corresponding API `interface` mentioned in the previous point.
+All **mutating** commands (`add`, `edit`, `present`, `absent`, `clear`, `addpoints`, `minuspoints`, …) save to **the file of the currently active list**.
 
-For example, the `Logic` component defines its API in the `Logic.java` interface and implements its functionality using the `LogicManager.java` class which follows the `Logic` interface. Other components interact with a given component through its interface rather than the concrete class (reason: to prevent outside component's being coupled to the implementation of a component), as illustrated in the (partial) class diagram below.
+This keeps the architecture the same as AB3, but with an extra “current file” concept held by the Model/Storage.
 
-<img src="images/ComponentManagers.png" width="300" />
+---
 
-The sections below give more details of each component.
+## 3. UI Component
 
-### UI component
+The UI layer is JavaFX-based and largely follows AB3.
 
-The **API** of this component is specified in [`Ui.java`](https://github.com/se-edu/addressbook-level3/tree/master/src/main/java/seedu/address/ui/Ui.java)
+**Main classes:**
 
-![Structure of the UI Component](images/UiClassDiagram.png)
+* `UiManager` – entry point to the UI.
+* `MainWindow` – top-level container; holds the command box, result display, status bar, and member list.
+* `PersonListPanel` – shows the current list of members **for the active file**.
+* `PersonCard` – shows:
 
-The UI consists of a `MainWindow` that is made up of parts e.g.`CommandBox`, `ResultDisplay`, `PersonListPanel`, `StatusBarFooter` etc. All these, including the `MainWindow`, inherit from the abstract `UiPart` class which captures the commonalities between classes that represent parts of the visible GUI.
+    * name
+    * **address**
+    * **year of study** (e.g. `Y2`)
+    * **faculty** (e.g. `School of Computing`)
+    * phone
+    * email
+    * **Points: X**
+    * tags
 
-The `UI` component uses the JavaFx UI framework. The layout of these UI parts are defined in matching `.fxml` files that are in the `src/main/resources/view` folder. For example, the layout of the [`MainWindow`](https://github.com/se-edu/addressbook-level3/tree/master/src/main/java/seedu/address/ui/MainWindow.java) is specified in [`MainWindow.fxml`](https://github.com/se-edu/addressbook-level3/tree/master/src/main/resources/view/MainWindow.fxml)
+![UI Class Diagram](diagrams/UiClassDiagram.png)
 
-The `UI` component,
+**Why this change?**
 
-* executes user commands using the `Logic` component.
-* listens for changes to `Model` data so that the UI can be updated with the modified data.
-* keeps a reference to the `Logic` component, because the `UI` relies on the `Logic` to execute commands.
-* depends on some classes in the `Model` component, as it displays `Person` object residing in the `Model`.
+Because we made `y/` and `f/` compulsory at the parser level, the UI can safely render them without guessing defaults. Points are shown explicitly to help exco track participation.
 
-### Logic component
+When the model reloads a different list (due to `switch`), the observable list changes and the UI automatically refreshes.
 
-**API** : [`Logic.java`](https://github.com/se-edu/addressbook-level3/tree/master/src/main/java/seedu/address/logic/Logic.java)
+---
 
-Here's a (partial) class diagram of the `Logic` component:
+## 4. Logic Component
 
-<img src="images/LogicClassDiagram.png" width="550"/>
+The **Logic** component is responsible for:
 
-The sequence diagram below illustrates the interactions within the `Logic` component, taking `execute("delete 1")` API call as an example.
+1. receiving the raw command string from the UI,
+2. parsing it using `AddressBookParser`,
+3. creating the corresponding `Command`,
+4. executing it on the `Model`,
+5. saving through `Storage` if the command mutates data, and
+6. returning a `CommandResult`.
 
-![Interactions Inside the Logic Component for the `delete 1` Command](images/DeleteSequenceDiagram.png)
+![Logic Class Diagram](diagrams/LogicClassDiagram.png)
 
-<div markdown="span" class="alert alert-info">:information_source: **Note:** The lifeline for `DeleteCommandParser` should end at the destroy marker (X) but due to a limitation of PlantUML, the lifeline continues till the end of diagram.
-</div>
+<div style="page-break-after: always;"></div>
 
-How the `Logic` component works:
+### 4.1 Command Execution
 
-1. When `Logic` is called upon to execute a command, it is passed to an `AddressBookParser` object which in turn creates a parser that matches the command (e.g., `DeleteCommandParser`) and uses it to parse the command.
-1. This results in a `Command` object (more precisely, an object of one of its subclasses e.g., `DeleteCommand`) which is executed by the `LogicManager`.
-1. The command can communicate with the `Model` when it is executed (e.g. to delete a person).<br>
-   Note that although this is shown as a single step in the diagram above (for simplicity), in the code it can take several interactions (between the command object and the `Model`) to achieve.
-1. The result of the command execution is encapsulated as a `CommandResult` object which is returned back from `Logic`.
+The sequence diagram below illustrates the interactions inside the Logic component when executing a `delete` command. It shows how a user command string flows through the parsing layer to create a `Command` object, which is then executed to interact with the `Model` component.
 
-Here are the other classes in `Logic` (omitted from the class diagram above) that are used for parsing a user command:
+![Logic Sequence Diagram](diagrams/LogicSequenceDiagram.png)
 
-<img src="images/ParserClasses.png" width="600"/>
+**Flow:**
+1. An external call to `LogicManager.execute("delete 2")` begins the process.
+2. `LogicManager` delegates parsing to `ClubTrackParser.parseCommand("delete 2")`.
+3. `ClubTrackParser` identifies the command word (`delete`) and creates the appropriate parser (`DeleteCommandParser`), which implements the `Parser` interface.
+4. The `DeleteCommandParser` parses the argument (`"2"`) and instantiates a new `DeleteCommand` object with the parsed index.
+5. The command object is returned to `LogicManager`.
+6. `LogicManager` calls `execute()` on the `DeleteCommand`, which invokes `deletePerson(2)` on the `Model`.
+7. The `Model` performs the deletion, constructs a `CommandResult` object to represent the outcome, and returns it to `LogicManager`.
+8. `LogicManager` returns the `CommandResult` to the caller (e.g., the UI).
 
-How the parsing works:
-* When called upon to parse a user command, the `AddressBookParser` class creates an `XYZCommandParser` (`XYZ` is a placeholder for the specific command name e.g., `AddCommandParser`) which uses the other classes shown above to parse the user command and create a `XYZCommand` object (e.g., `AddCommand`) which the `AddressBookParser` returns back as a `Command` object.
-* All `XYZCommandParser` classes (e.g., `AddCommandParser`, `DeleteCommandParser`, ...) inherit from the `Parser` interface so that they can be treated similarly where possible e.g, during testing.
+This interaction pattern is consistent across all commands — every command goes through the same **parse → create → execute → result** cycle.
+<div style="page-break-after: always;"></div>
 
-### Model component
-**API** : [`Model.java`](https://github.com/se-edu/addressbook-level3/tree/master/src/main/java/seedu/address/model/Model.java)
+**Key classes involved:**
+- `LogicManager` — main orchestrator that executes user commands.
+- `ClubTrackParser` — determines which parser to use based on the command word.
+- `Parser` (interface) — defines the `parse(String args)` method.
+- `DeleteCommandParser` — concrete parser that extracts the argument and constructs `DeleteCommand`.
+- `Command` (abstract) — base class for all executable user commands.
+- `CommandResult` — encapsulates the output of command execution.
+- `Model` — the data layer that performs the actual operation (e.g., delete, add).
 
-<img src="images/ModelClassDiagram.png" width="450" />
+**Design intent:**
+This structure cleanly separates concerns between **command parsing**, **command execution**, and **data management**, allowing new commands to be added with minimal coupling.
 
+---
 
-The `Model` component,
+### 4.2 Parser Class Diagram
 
-* stores the address book data i.e., all `Person` objects (which are contained in a `UniquePersonList` object).
-* stores the currently 'selected' `Person` objects (e.g., results of a search query) as a separate _filtered_ list which is exposed to outsiders as an unmodifiable `ObservableList<Person>` that can be 'observed' e.g. the UI can be bound to this list so that the UI automatically updates when the data in the list change.
-* stores a `UserPref` object that represents the user’s preferences. This is exposed to the outside as a `ReadOnlyUserPref` objects.
-* does not depend on any of the other three components (as the `Model` represents data entities of the domain, they should make sense on their own without depending on other components)
+The diagram below provides a detailed view of the **Parser layer**, showing how user input is transformed into executable `Command` objects.
 
-<div markdown="span" class="alert alert-info">:information_source: **Note:** An alternative (arguably, a more OOP) model is given below. It has a `Tag` list in the `AddressBook`, which `Person` references. This allows `AddressBook` to only require one `Tag` object per unique tag, instead of each `Person` needing their own `Tag` objects.<br>
+![Parser Class Diagram](diagrams/ParserClassDiagram.png)
 
-<img src="images/BetterModelClassDiagram.png" width="450" />
+**Description:**
 
-</div>
+* `ClubTrackParser` serves as the **entry point** for all command strings.
+  It identifies the command word and delegates parsing to the appropriate command-specific parser (represented collectively as `XYZCommandParser`).
+* Each command parser (e.g. `AddCommandParser`, `EditCommandParser`, `SwitchCommandParser`, `SearchCommandParser`) implements the `Parser` interface and follows a consistent structure:
+  tokenize → extract arguments → validate → create the corresponding `Command`.
+* `XYZCommandParser` represents all individual command parsers in simplified form for clarity.
+* `CliSyntax`, `Prefix`, `ArgumentTokenizer`, and `ArgumentMultimap` form the utility layer that handles prefix-based argument extraction (e.g. `n/`, `p/`, `t/`).
+* `ParserUtil` provides static helper methods for validating and converting parsed strings into domain model objects (e.g. `Name`, `Tag`, `Faculty`).
 
+**Key relationships:**
 
-### Storage component
+* `ClubTrackParser` **creates** the relevant parser (`XYZCommandParser`) based on the user input.
+* Each parser **creates** a `Command` after successful parsing.
+* `ParserUtil`, `ArgumentTokenizer`, and `ArgumentMultimap` are **used** across all parsers for argument processing.
+* `CliSyntax` and `Prefix` **define** the shared command prefix structure used by all parsers.
 
-**API** : [`Storage.java`](https://github.com/se-edu/addressbook-level3/tree/master/src/main/java/seedu/address/storage/Storage.java)
+**Design intent:**
+This modular parser design ensures **extensibility**—adding a new command only requires:
 
-<img src="images/StorageClassDiagram.png" width="550" />
+1. Implementing a new `*CommandParser` that adheres to the `Parser` interface, and
+2. Registering it in `ClubTrackParser`.
 
-The `Storage` component,
-* can save both address book data and user preference data in JSON format, and read them back into corresponding objects.
-* inherits from both `AddressBookStorage` and `UserPrefStorage`, which means it can be treated as either one (if only the functionality of only one is needed).
-* depends on some classes in the `Model` component (because the `Storage` component's job is to save/retrieve objects that belong to the `Model`)
+This design promotes **low coupling**, **code reuse**, and **consistent parsing behavior** across all commands.
 
-### Common classes
+---
 
-Classes used by multiple components are in the `seedu.address.commons` package.
+<div style="page-break-after: always;"></div>
 
---------------------------------------------------------------------------------------------------------------------
+## 5. Model Component
 
-## **Implementation**
+The **Model** layer keeps the application state and provides observable lists to the UI.
 
-This section describes some noteworthy details on how certain features are implemented.
+![Model Class Diagram](diagrams/ModelClassDiagram.png)
 
-### \[Proposed\] Undo/redo feature
+**Main responsibilities:**
 
-#### Proposed Implementation
+* hold the current `AddressBook` (for the active list),
+* expose `FilteredList<Person>` for UI,
+* remember the **active list name** (e.g. `ClubTrack`, `Training_2025_10_20`),
+* hold user preferences.
+<div style="page-break-after: always;"></div>
 
-The proposed undo/redo mechanism is facilitated by `VersionedAddressBook`. It extends `AddressBook` with an undo/redo history, stored internally as an `addressBookStateList` and `currentStatePointer`. Additionally, it implements the following operations:
+### 5.1 Person model
 
-* `VersionedAddressBook#commit()` — Saves the current address book state in its history.
-* `VersionedAddressBook#undo()` — Restores the previous address book state from its history.
-* `VersionedAddressBook#redo()` — Restores a previously undone address book state from its history.
+We extended AB3’s `Person` to include club-specific and attendance fields:
 
-These operations are exposed in the `Model` interface as `Model#commitAddressBook()`, `Model#undoAddressBook()` and `Model#redoAddressBook()` respectively.
+```tex
+Person
+ ├─ name : Name
+ ├─ phone : Phone           // 8 digits, start with 8 or 9
+ ├─ email : Email
+ ├─ address : Address       // shown on card
+ ├─ yearOfStudy : int       // 1..5
+ ├─ faculty : String        // non-empty
+ ├─ tags : Set<Tag>
+ ├─ isPresent : boolean     // for attendance
+ └─ points : Points         // value object
+```
 
-Given below is an example usage scenario and how the undo/redo mechanism behaves at each step.
+We also changed **identity**:
 
-Step 1. The user launches the application for the first time. The `VersionedAddressBook` will be initialized with the initial address book state, and the `currentStatePointer` pointing to that single address book state.
+* **Before (AB3):** name-based
+* **Now:** **same person = same email OR same phone**
 
-![UndoRedoState0](images/UndoRedoState0.png)
+    * lets us store multiple people with the same name
+    * it still guards against accidental duplicates using contact info
 
-Step 2. The user executes `delete 5` command to delete the 5th person in the address book. The `delete` command calls `Model#commitAddressBook()`, causing the modified state of the address book after the `delete 5` command executes to be saved in the `addressBookStateList`, and the `currentStatePointer` is shifted to the newly inserted address book state.
+`Points` is implemented as a small value object to make it easy to reason about add/subtract operations.
 
-![UndoRedoState1](images/UndoRedoState1.png)
+---
 
-Step 3. The user executes `add n/David …​` to add a new person. The `add` command also calls `Model#commitAddressBook()`, causing another modified address book state to be saved into the `addressBookStateList`.
+<div style="page-break-after: always;"></div>
 
-![UndoRedoState2](images/UndoRedoState2.png)
+## 6. Storage Component
 
-<div markdown="span" class="alert alert-info">:information_source: **Note:** If a command fails its execution, it will not call `Model#commitAddressBook()`, so the address book state will not be saved into the `addressBookStateList`.
+The Storage layer reads/writes JSON using the usual AB3 JSON storage classes, but with an extra concept: **active list name = file name**.
 
-</div>
+![Storage Class Diagram](diagrams/StorageClassDiagram.png)
 
-Step 4. The user now decides that adding the person was a mistake, and decides to undo that action by executing the `undo` command. The `undo` command will call `Model#undoAddressBook()`, which will shift the `currentStatePointer` once to the left, pointing it to the previous address book state, and restores the address book to that state.
+**Behaviour:**
 
-![UndoRedoState3](images/UndoRedoState3.png)
+* On startup, we try to read:
 
-<div markdown="span" class="alert alert-info">:information_source: **Note:** If the `currentStatePointer` is at index 0, pointing to the initial AddressBook state, then there are no previous AddressBook states to restore. The `undo` command uses `Model#canUndoAddressBook()` to check if this is the case. If so, it will return an error to the user rather
-than attempting to perform the undo.
+  ```tex
+  data/ClubTrack.json
+  ```
 
-</div>
+  If it does not exist, we create it with a sample ClubTrack dataset.
 
-The following sequence diagram shows how an undo operation goes through the `Logic` component:
+* When the user runs:
 
-![UndoSequenceDiagram](images/UndoSequenceDiagram-Logic.png)
+  ```tex
+  switch CCA_Showcase
+  ```
 
-<div markdown="span" class="alert alert-info">:information_source: **Note:** The lifeline for `UndoCommand` should end at the destroy marker (X) but due to a limitation of PlantUML, the lifeline reaches the end of diagram.
+  we from then on read/write:
 
-</div>
+  ```tex
+  data/CCA_Showcase.json
+  ```
 
-Similarly, how an undo operation goes through the `Model` component is shown below:
+* `clear` only clears the **currently loaded** address book, and then saves it back to **the same file**.
 
-![UndoSequenceDiagram](images/UndoSequenceDiagram-Model.png)
+This design keeps lists isolated. Each event/training/day can have its own file, but the rest of the architecture is unchanged.
 
-The `redo` command does the opposite — it calls `Model#redoAddressBook()`, which shifts the `currentStatePointer` once to the right, pointing to the previously undone state, and restores the address book to that state.
+---
 
-<div markdown="span" class="alert alert-info">:information_source: **Note:** If the `currentStatePointer` is at index `addressBookStateList.size() - 1`, pointing to the latest address book state, then there are no undone AddressBook states to restore. The `redo` command uses `Model#canRedoAddressBook()` to check if this is the case. If so, it will return an error to the user rather than attempting to perform the redo.
+## 7. Feature Implementation
 
-</div>
+### 7.1 `switch` feature
 
-Step 5. The user then decides to execute the command `list`. Commands that do not modify the address book, such as `list`, will usually not call `Model#commitAddressBook()`, `Model#undoAddressBook()` or `Model#redoAddressBook()`. Thus, the `addressBookStateList` remains unchanged.
+**Goal:** let exco maintain multiple independent member/attendance lists (e.g. Week 1 training, production night, ad-hoc event) without mixing data.
 
-![UndoRedoState4](images/UndoRedoState4.png)
+**Command format:**
 
-Step 6. The user executes `clear`, which calls `Model#commitAddressBook()`. Since the `currentStatePointer` is not pointing at the end of the `addressBookStateList`, all address book states after the `currentStatePointer` will be purged. Reason: It no longer makes sense to redo the `add n/David …​` command. This is the behavior that most modern desktop applications follow.
+```tex
+switch LIST_NAME
+```
 
-![UndoRedoState5](images/UndoRedoState5.png)
+**Flow:**
 
-The following activity diagram summarizes what happens when a user executes a new command:
+1. `LogicManager` parses `LIST_NAME`.
+2. `Model` is told to “activate” that list.
+3. `Storage` tries to load `data/LIST_NAME.json`:
 
-<img src="images/CommitActivityDiagram.png" width="250" />
+    * if present → load
+    * if missing → create a new empty address book, save as `data/LIST_NAME.json`
+4. UI refreshes because the model’s observable list changed.
 
-#### Design considerations:
+<div style="page-break-after: always;"></div>
 
-**Aspect: How undo & redo executes:**
+**Activity diagram:**
 
-* **Alternative 1 (current choice):** Saves the entire address book.
-  * Pros: Easy to implement.
-  * Cons: May have performance issues in terms of memory usage.
+![Switch Activity Diagram](diagrams/SwitchActivityDiagram.png)
 
-* **Alternative 2:** Individual command knows how to undo/redo by
-  itself.
-  * Pros: Will use less memory (e.g. for `delete`, just save the person being deleted).
-  * Cons: We must ensure that the implementation of each individual command are correct.
+**Design considerations:**
 
-_{more aspects and alternatives to be added}_
+* We store the active list name in the model layer so that **all** mutating commands (add, edit, present, points, clear) can save to the correct file.
+* We **reused** the same JSON structure from AB3 to minimise changes.
+* This fits the CS2103T expectation that *clear should not unexpectedly wipe unrelated data.*
 
-### \[Proposed\] Data archiving
+---
 
-_{Explain here how the data archiving feature will be implemented}_
+<div style="page-break-after: always;"></div>
 
+### 7.2 `add` command (updated)
 
---------------------------------------------------------------------------------------------------------------------
+**Old (AB3):** name, phone, email, **address** were compulsory; others optional.
+**New (ClubTrack):** we keep **address** in the same position as AB3, then make **year of study** (`y/`) and **faculty** (`f/`) compulsory **after** address.
 
-## **Documentation, logging, testing, configuration, dev-ops**
+**New format (final):**
 
-* [Documentation guide](Documentation.md)
-* [Testing guide](Testing.md)
-* [Logging guide](Logging.md)
-* [Configuration guide](Configuration.md)
-* [DevOps guide](DevOps.md)
+```tex
+add n/NAME p/PHONE e/EMAIL a/ADDRESS y/YEAR_OF_STUDY f/FACULTY [t/TAG]...
+```
 
---------------------------------------------------------------------------------------------------------------------
+**Validation:**
 
-## **Appendix: Requirements**
+* `p/PHONE` → 8 digits, starts with 8 or 9
+* `a/ADDRESS` → non-empty
+* `y/` → integer 1–5
+* `f/` → non-empty
+* single-valued prefixes must not be repeated
 
-### Product scope
+**Why this order?**
 
-**Target user profile**:
+* It stays close to AB3 (which markers/testers already know).
+* We only **extended** the person with `y/` and `f/`, we did not reorder all existing prefixes.
+* It keeps **User Guide** and **Developer Guide** consistent.
 
-* has a need to manage a significant number of contacts
-* prefer desktop apps over other types
-* can type fast
-* prefers typing to mouse interactions
-* is reasonably comfortable using CLI apps
+**Example:**
 
-**Value proposition**: manage contacts faster than a typical mouse/GUI driven app
+```tex
+add n/John Doe p/91234567 e/johnd@example.com a/Blk 123, #02-01 y/2 f/School of Computing t/committee
+```
 
+---
 
-### User stories
+<div style="page-break-after: always;"></div>
 
-Priorities: High (must have) - `* * *`, Medium (nice to have) - `* *`, Low (unlikely to have) - `*`
+### 7.3 `find` vs `search`
 
-| Priority | As a …​                                    | I want to …​                     | So that I can…​                                                        |
-| -------- | ------------------------------------------ | ------------------------------ | ---------------------------------------------------------------------- |
-| `* * *`  | new user                                   | see usage instructions         | refer to instructions when I forget how to use the App                 |
-| `* * *`  | user                                       | add a new person               |                                                                        |
-| `* * *`  | user                                       | delete a person                | remove entries that I no longer need                                   |
-| `* * *`  | user                                       | find a person by name          | locate details of persons without having to go through the entire list |
-| `* *`    | user                                       | hide private contact details   | minimize chance of someone else seeing them by accident                |
-| `*`      | user with many persons in the address book | sort persons by name           | locate a person easily                                                 |
+We deliberately split them to reduce PE bugs and to make behaviour easy to explain.
 
-*{More to be added}*
+#### 7.3.1 `find`
 
-### Use cases
+* **Purpose:** quick lookup by **name only**
+* **Behaviour:** case-insensitive **contains** on the *name* field
+* **Does NOT** search tags, faculty, year, or address
+* **Examples:**
 
-(For all use cases below, the **System** is the `AddressBook` and the **Actor** is the `user`, unless specified otherwise)
+  ```tex
+  find john
+  find alex david
+  ```
 
-**Use case: Delete a person**
+  matches `John`, `Johnathan`, `Alex David`.
+
+#### 7.3.2 `search`
+
+* **Purpose:** structured filtering, especially **tag-based**
+* **Behaviour:** tag **prefix** matching
+* **Example:**
+
+  ```tex
+  search t/log
+  ```
+
+  matches people tagged `logistics`, `logiCore`, `log`, because the tag **starts with** `log`.
+
+You may also supply a name component in the future, but for v1.5 the key is: **“find is for names; search is for tags.”**
+
+---
+
+<div style="page-break-after: always;"></div>
+
+### 7.4 Points features
+
+We added a lightweight points system for participation:
+
+* `addpoints INDEX pts/VALUE` – add `VALUE` to member’s points
+* `minuspoints INDEX pts/VALUE` – subtract `VALUE`
+* `points INDEX` – **show** member’s current points (does not edit)
+
+This is model-only, so the UI just renders `Points: X` from the person.
+
+---
+
+## 8. Testing and Test Updates
+
+Because we tightened phone validation **and** made `y/` + `f/` compulsory, several AB3 tests needed updating.
+
+**What we changed:**
+
+1. **Test constants**
+
+    * `VALID_PHONE_AMY = "88888888"`
+    * `VALID_PHONE_BOB = "99999999"`
+    * Any other phone in test fixtures must be 8 digits starting with 8/9.
+
+2. **Parser tests**
+
+    * `AddCommandParserTest` must now include **both** `y/` and `f/` **and** keep the new prefix order: `a/` → `y/` → `f/`.
+    * Duplicate-prefix tests must list `y/` and `f/` in the expected error where relevant.
+
+3. **Storage-related tests**
+
+    * In tests where we trigger an `add` to force a save (e.g. in `LogicManagerTest`), the input must now contain **all compulsory prefixes**:
+
+      ```tex
+      add n/Amy p/88888888 e/amy@example.com a/Blk 123 y/1 f/School of Computing
+      ```
+
+4. **Typical persons**
+
+    * `TypicalPersons` → change phones to valid SG numbers.
+
+This keeps test data aligned with the real rules users see in the UI/UG.
+
+---
+
+## 9. Editing the data file
+
+ClubTrack stores data in:
+
+```tex
+[JAR location]/data/<listName>.json
+```
+
+* Default list:
+
+  ```tex
+  data/ClubTrack.json
+  ```
+
+* After `switch soccer` (or any other name):
+
+  ```tex
+  data/soccer.json
+  ```
+
+Advanced users may edit these JSON files manually.
+
+> ⚠️ **Caution:** If the JSON is malformed or fields are missing, ClubTrack will start that list empty the next time it is loaded. Always back up your `data/` folder first.
+
+---
+
+<div style="page-break-after: always;"></div>
+
+## 10. Product scope
+
+### Target user profile:
+
+* is part of a university club executive committee
+* needs to manage a large roster of members across multiple events or lists
+* prefers **desktop apps** for reliability and offline access
+* types fast and prefers keyboard-driven workflows
+* is comfortable using **Command Line Interface (CLI)** apps with structured commands
+* wants to easily track attendance, points, and roles without using spreadsheets
+
+### Value proposition:
+
+ClubTrack enables club executives to **manage members, track attendance, and assign points up to 3× faster** than traditional spreadsheet-based solutions through an intuitive command-line interface optimized for power users.
+
+---
+
+<div style="page-break-after: always;"></div>
+
+## 11. User stories
+
+Priorities: High (must have) – `* * *`, Medium (nice to have) – `* *`, Low (unlikely to have) – `*`
+
+| Priority | As a …           | I want to …                            | So that I can …                           |
+|----------|------------------|----------------------------------------|-------------------------------------------|
+| `* * *`  | Club Exco Member | add a new member                       | keep track of the membership list         |
+| `* * *`  | Club Exco Member | edit a member’s details                | keep contact information up to date       |
+| `* * *`  | Club Exco Member | delete a current member                | keep the membership list up to date       |
+| `* * *`  | Club Exco Member | list all members                       | see the complete membership at a glance   |
+| `* * *`  | Club Exco Member | search for a member by name            | find them quickly without scrolling       |
+| `* * *`  | Club Exco Member | search members by tag prefix           | filter according to specific criteria     |
+| `* * *`  | Club Secretary   | mark a member as present               | keep track of their attendance            |
+| `* * *`  | Club Secretary   | unmark a member as present             | correct attendance mistakes               |
+| `* * *`  | Club Secretary   | view attendance list                   | verify attendance status                  |
+| `* * *`  | Club Exco Member | tag a member                           | record their role or committee            |
+| `* * *`  | Club Exco Member | remove a tag from a member             | keep tags accurate and up to date         |
+| `* * *`  | Club Exco Member | switch to another member list          | manage attendance for different events    |
+| `* * *`  | Club Exco Member | remove an existing list                | delete outdated event rosters             |
+| `* * *`  | Club Exco Member | add points to a member                 | reward participation and contributions    |
+| `* * *`  | Club Exco Member | deduct points from a member            | correct point assignment mistakes         |
+| `* * *`  | Club Exco Member | view a member’s current points         | see their participation progress          |
+| `* *`    | Club Exco Member | clear all members in the current list  | reset event attendance quickly            |
+| `* *`    | Club Exco Member | access help information                | learn how to use the available commands   |
+| `* *`    | Club Exco Member | exit the program                       | close the application safely              |
+| `*`      | Club Secretary   | view attendance summary for a date     | check how many people showed up           |
+| `*`      | Club Exco Member | list members sorted by points          | identify top contributors                 |
+| `*`      | Club Exco Member | generate a random selection of members | pick someone fairly                       |
+| `*`      | Club Exco Member | export member data to a file           | share it with other committees/executives |
+
+*Note: Some user stories above are for future versions and may not be in the current build.*
+
+---
+
+<div style="page-break-after: always;"></div>
+
+## 12. Use cases
+
+(For all use cases below, the **System** is `ClubTrack` and the **Actor** is the `user`, unless specified otherwise.)
+
+---
+
+### **UC01 – Add a member**
 
 **MSS**
 
-1.  User requests to list persons
-2.  AddressBook shows a list of persons
-3.  User requests to delete a specific person in the list
-4.  AddressBook deletes the person
+1. User issues the `add` command with valid prefixes, for example:
 
-    Use case ends.
+   ```tex
+   add n/John Doe p/91234567 e/john@example.com a/Blk 123, #02-01 y/2 f/SOC t/committee
+   ```
+2. ClubTrack validates each field (e.g. phone format, year range, non-empty faculty/address).
+3. ClubTrack adds the member to the **active list** and saves the list to disk.
+4. ClubTrack displays a confirmation message and shows the new member in the UI.
+   Use case ends.
 
 **Extensions**
 
-* 2a. The list is empty.
+* 1a. Missing or invalid field (e.g. invalid phone/year/faculty)
 
-  Use case ends.
+    * 1a1. ClubTrack shows an error message. Use case ends.
+* 3a. Duplicate member detected (same phone or email)
 
-* 3a. The given index is invalid.
+    * 3a1. ClubTrack rejects the command and shows a duplicate-member error. Use case ends.
 
-    * 3a1. AddressBook shows an error message.
+---
 
-      Use case resumes at step 2.
+<div style="page-break-after: always;"></div>
 
-*{More to be added}*
+### **UC02 – Edit a member**
 
-### Non-Functional Requirements
+**MSS**
 
-1.  Should work on any _mainstream OS_ as long as it has Java `17` or above installed.
-2.  Should be able to hold up to 1000 persons without a noticeable sluggishness in performance for typical usage.
-3.  A user with above average typing speed for regular English text (i.e. not code, not system admin commands) should be able to accomplish most of the tasks faster using commands than using the mouse.
+1. User issues the `edit` command with the member’s index and fields to change, e.g.:
 
-*{More to be added}*
+   ```tex
+   edit 2 p/91234568 a/21 Kent Ridge y/3
+   ```
+2. ClubTrack validates the new input fields and locates the member by index.
+3. ClubTrack updates the member’s details and saves the updated list.
+4. ClubTrack displays a success message and the updated member details in the UI.
+   Use case ends.
 
-### Glossary
+**Extensions**
 
-* **Mainstream OS**: Windows, Linux, Unix, MacOS
-* **Private contact detail**: A contact detail that is not meant to be shared with others
+* 2a. Invalid index
 
---------------------------------------------------------------------------------------------------------------------
+    * 2a1. ClubTrack shows an invalid index error. Use case ends.
+* 1a. Attempt to edit to a duplicate member (same phone/email)
 
-## **Appendix: Instructions for manual testing**
+    * 1a1. ClubTrack rejects the edit and shows a duplicate-member error. Use case ends.
 
-Given below are instructions to test the app manually.
+---
 
-<div markdown="span" class="alert alert-info">:information_source: **Note:** These instructions only provide a starting point for testers to work on;
-testers are expected to do more *exploratory* testing.
+<div style="page-break-after: always;"></div>
 
-</div>
+### **UC03 – Mark attendance for an event**
 
-### Launch and shutdown
+**MSS**
 
-1. Initial launch
+1. User switches to the relevant list for the event (e.g. `switch Training_2025_10_20`).
+2. User issues the `present` command with a member’s index, e.g.:
 
-   1. Download the jar file and copy into an empty folder
+   ```tex
+   present 3
+   ```
+3. ClubTrack marks the member as present in that event list.
+4. ClubTrack displays a success message and updates the attendance status in the UI.
+   Use case ends.
 
-   1. Double-click the jar file Expected: Shows the GUI with a set of sample contacts. The window size may not be optimum.
+**Extensions**
 
-1. Saving window preferences
+* 2a. Invalid index or member not found
 
-   1. Resize the window to an optimum size. Move the window to a different location. Close the window.
+    * 2a1. ClubTrack shows an error message. Use case ends.
+* 3a. Member already marked present
 
-   1. Re-launch the app by double-clicking the jar file.<br>
-       Expected: The most recent window size and location is retained.
+    * 3a1. ClubTrack shows a warning and makes no change. Use case ends.
 
-1. _{ more test cases …​ }_
+---
 
-### Deleting a person
+### **UC04 – Add points to a member**
 
-1. Deleting a person while all persons are being shown
+**MSS**
 
-   1. Prerequisites: List all persons using the `list` command. Multiple persons in the list.
+1. User issues the `addpoints` command with a valid member index and points value, e.g.:
 
-   1. Test case: `delete 1`<br>
-      Expected: First contact is deleted from the list. Details of the deleted contact shown in the status message. Timestamp in the status bar is updated.
+   ```tex
+   addpoints 1 pts/5
+   ```
+2. ClubTrack validates that the points value is a positive integer within reasonable limits.
+3. ClubTrack updates the member’s points in the active list and saves the file.
+4. ClubTrack displays the new total points and a confirmation message.
+   Use case ends.
 
-   1. Test case: `delete 0`<br>
-      Expected: No person is deleted. Error details shown in the status message. Status bar remains the same.
+**Extensions**
 
-   1. Other incorrect delete commands to try: `delete`, `delete x`, `...` (where x is larger than the list size)<br>
-      Expected: Similar to previous.
+* 1a. Invalid index or points format
 
-1. _{ more test cases …​ }_
+    * 1a1. ClubTrack shows an error message. Use case ends.
 
-### Saving data
+---
 
-1. Dealing with missing/corrupted data files
+<div style="page-break-after: always;"></div>
 
-   1. _{explain how to simulate a missing/corrupted file, and the expected behavior}_
+### **UC05 – Search for members by tag**
 
-1. _{ more test cases …​ }_
+**MSS**
+
+1. User issues the `search` command with one or more tag prefixes, e.g.:
+
+   ```tex
+   search t/exco t/dance
+   ```
+2. ClubTrack filters members whose tags begin with the given prefixes.
+3. ClubTrack displays the filtered list of matching members.
+   Use case ends.
+
+**Extensions**
+
+* 1a. No matches found
+
+    * 1a1. ClubTrack shows a message indicating no members found. Use case ends.
+
+---
+
+<div style="page-break-after: always;"></div>
+
+### **UC06 – Switch to another member list**
+
+**MSS**
+
+1. User issues the `switch` command with the desired list name, e.g.:
+
+   ```tex
+   switch MatchDay_2025_11_05
+   ```
+2. ClubTrack checks if the list file exists in the `data/` directory.
+3. If it exists, ClubTrack loads it; otherwise, a new empty list is created.
+4. ClubTrack displays confirmation and updates the UI to show the new active list.
+   Use case ends.
+
+**Extensions**
+
+* 2a. Invalid list name (e.g. contains restricted characters)
+
+    * 2a1. ClubTrack rejects the command and shows an error message. Use case ends.
+
+---
+
+### **UC07 – Delete a member**
+
+**MSS**
+
+1. User issues the `delete` command with the member’s index, e.g.:
+
+   ```tex
+   delete 4
+   ```
+2. ClubTrack validates the index and removes the corresponding member from the active list.
+3. ClubTrack saves the updated list and displays a confirmation message.
+   Use case ends.
+
+**Extensions**
+
+* 1a. Invalid index
+
+    * 1a1. ClubTrack shows an invalid index error. Use case ends.
+
+---
+
+<div style="page-break-after: always;"></div>
+
+### **UC08 – Clear current list**
+
+**MSS**
+
+1. User issues the `clear` command to remove all members from the current list.
+2. ClubTrack prompts for confirmation (if applicable).
+3. Upon confirmation, ClubTrack clears the list and saves an empty file.
+4. ClubTrack displays a success message and an empty list in the UI.
+   Use case ends.
+
+**Extensions**
+
+* 2a. User cancels confirmation
+
+    * 2a1. ClubTrack aborts and no data is modified. Use case ends.
+
+---
+
+### **UC09 – View member points**
+
+**MSS**
+
+1. User issues the `points` command with a member’s index, e.g.:
+
+   ```tex
+   points 2
+   ```
+2. ClubTrack retrieves and displays the total points of the specified member.
+   Use case ends.
+
+**Extensions**
+
+* 1a. Invalid index
+
+    * 1a1. ClubTrack shows an error message. Use case ends.
+
+---
+
+### **UC10 – Exit the program**
+
+**MSS**
+
+1. User issues the `exit` command.
+2. ClubTrack saves all data and closes the application.
+   Use case ends.
+
+---
+
+## 13. Non-Functional Requirements
+
+1. Should work on any **mainstream OS** with Java 17 or above installed.
+2. Should be able to support **up to 500 members per list**, with common commands such as `add`, `edit`, or `find` completing within **2 seconds under normal conditions**.
+3. A **typical user** with above-average typing speed should be able to accomplish most tasks faster using commands than using the mouse.
+4. Should automatically save data after every mutating command.
+5. Core functionality should work fully **offline**.
+6. Should maintain data integrity when recording or modifying information.
+7. Should run on university PCs and personal laptops without requiring administrative rights.
+8. Command prefixes should follow a **consistent format** to reduce user confusion.
+
+---
+
+## 14. Glossary
+
+* **Club Exco Member** – executive committee member responsible for club administration.
+* **Attendance Record** – a log entry indicating whether a member was present at a specific event.
+* **Mainstream OS** – Windows, macOS, Linux.
+* **Member Tag** – a label assigned to members to categorise them (e.g. `treasurer`, `dance`, `freshie`).
+* **CLI** – Command Line Interface.
+* **Active list** – the currently selected member list; determines which JSON file is read/written.
+* **Duty Roster** – schedule assigning tasks to members.
+* **Normal conditions** – refers to running ClubTrack on a mainstream operating system (Windows 11, macOS 14, or Ubuntu 22.04) with Java 17 or above, on a typical university laptop (≥ 8 GB RAM, ≥ 2.5 GHz dual-core processor, SSD storage) while managing up to 500 members.
+* **Typical user** – a club executive or secretary familiar with basic computer use and able to type at an average speed of around 60 words per minute.
+* **Common operations** – frequently used commands such as `add`, `edit`, `delete`, `find`, `list`, and `switch`.
+
+---
+
+<div style="page-break-after: always;"></div>
+
+## 15. Acknowledgements
+
+* Project structure, Gradle setup, JSON storage utilities, and some diagrams are **adapted from** the official **AddressBook Level 3 (AB3)** project by the CS2103T teaching team.
+* Some command patterns (parser → command → command test) follow AB3’s recommended structure.
+* Original AB3 documentation: credit to CS2103T teaching team.
+* GitHub Copilot was used to provide code autocompletion and boilerplate suggestions. All AI-generated code was reviewed and verified by team members to ensure it aligned with the intended functionality and project requirements.
+* ChatGPT (OpenAI) was used to improve documentation clarity, generate explanatory comments, and refine diagrams or test descriptions for time efficiency. The team ensured that all final content accurately reflected our own understanding and implementation decisions.
+
+---
+
+<div style="page-break-after: always;"></div>
+
+## Appendix A – Instructions for Manual Testing
+
+### A.1 Launch and shutdown
+
+1. Ensure you have Java 17.
+2. Run `java -jar ClubTrack.jar`.
+3. Verify that the respective JSON save file is created after making a change to the data.
+4. Close the window → app should exit cleanly.
+
+### A.2 Adding a member
+
+**Input:**
+
+```tex
+add n/Amy Bee p/88888888 e/amy@example.com a/Blk 123 y/2 f/School of Computing
+```
+
+**Expected:**
+
+* A new card appears with:
+
+    * name “Amy Bee”
+    * address shown
+    * `Y2 - School of Computing`
+    * phone `88888888`
+    * `Points: 0`
+
+**Error case:**
+
+```tex
+add n/Bob p/123 e/bob@example.com a/Tampines y/2 f/SOC
+```
+
+Expected: error about phone constraints.
+
+<div style="page-break-after: always;"></div>
+
+### A.3 Switching lists
+
+1. Run:
+
+   ```tex
+   switch Training_2025_10_20
+   ```
+
+2. Expected:
+
+    * status message says list switched / created
+    * list view becomes empty (for a new list)
+
+3. Add someone here:
+
+   ```tex
+   add n/John p/91234567 e/john@example.com a/UTown y/1 f/SoC
+   ```
+
+4. Switch back:
+
+   ```tex
+   switch default
+   ```
+
+   Expected: you see the original list.
+   Switch again to `Training_2025_10_20` → John is still there.
+
+### A.4 Searching
+
+1. Add a person with tag `Logistics` and one with tag `LogiCore`.
+
+2. Run:
+
+   ```tex
+   search t/log
+   ```
+
+   Expected: both appear (prefix match).
+
+3. Run:
+
+   ```tex
+   find log
+   ```
+
+   Expected: **does not** return them unless “log” appears in their **name**.
+
+<div style="page-break-after: always;"></div>
+
+### A.5 Clearing current list
+
+1. Switch to a test list:
+
+   ```tex
+   switch TestList
+   add n/Test p/91234567 e/test@example.com a/Biz y/1 f/SoC
+   clear
+   ```
+
+2. Expected: current list becomes empty; other lists are **not** affected.
+
+---
+
+<div style="page-break-after: always;"></div>
+
+## Appendix B – Effort
+
+**Team size:** 5
+
+1. **What was harder than AB3?**
+
+    * Implementing **switchable member lists**, each backed by its own JSON file, without breaking AB3’s single-file storage design.
+    * Enforcing **compulsory fields (`y/`, `f/`)** required deep changes across parsers, model classes, and test utilities.
+    * Enhancing **validation rules** (e.g. stricter phone and email formats) that invalidated large portions of inherited AB3 test data.
+    * Maintaining **data consistency** and auto-save behaviour when switching between lists — required careful model–storage synchronization.
+
+2. **What we reused:**
+
+    * AB3’s **Command → Parser → Model → Storage** architectural pattern.
+    * AB3’s **diagram conventions** and documentation layout for visual clarity.
+    * AB3’s **JUnit test scaffolding** for command and parser testing.
+
+3. **What we added:**
+
+    * **`SwitchCommand`** and supporting model state to enable seamless switching between multiple club rosters.
+    * **Persistent points and attendance tracking**, including updated UI and storage integration.
+    * **Enhanced tag and search system** with prefix-based filtering for roles (e.g. `committee`, `exco`).
+    * **Refined UI layout** showing key fields (year, faculty, points) and dynamic updates after each command.
+    * **Improved parser utilities** to handle stricter validation.
+
+---
+
+<div style="page-break-after: always;"></div>
+
+## Appendix C – Planned Enhancements
+
+**Team size:** 5
+
+1. **List existing lists**
+   Since we now create JSON files on demand, users should be able to run something like `lists` to see available roster files.
+
+2. **Email validation extension**
+   Update validation to accept the special character '+' in the local-part to match standard email formats.
+
+3. **Role-based tags**
+   Some tags are “roles” (President, Secretary). We can display them differently in the UI.
+
+4. **Import from CSV**
+   Many clubs keep members in Google Sheets. A CSV import would reduce data entry.
+
+5. **Support for non-Singapore phone numbers**
+   Currently only 8-digit local numbers (starting with 8 or 9) are allowed. We plan to extend validation to include international formats (e.g., +60, +65, +91).
+
+6. **Allow `/` in member names**
+   Certain legal names include slashes (e.g., “S/O John Doe”). We will enhance `Name` validation to support these characters safely.
+
+7. **Input validation for duplicate faculty fields**
+   Editing a member with multiple `f/` prefixes silently keeps the latest. We plan to detect duplicates and show a proper error message.
+
+8. **Input validation for duplicate year fields**
+   Similar to faculty, multiple `y/` prefixes during edit or add should trigger an error instead of overwriting the last value.
+
+9. **Strict date validation for invalid calendar dates**
+   Currently, invalid dates like 31/11/2025 are silently adjusted to the nearest valid date (30/11/2025) due to Java’s lenient date parsing. We plan to enable strict validation using ResolverStyle.STRICT so that impossible dates trigger a clear error message instead of being auto-corrected.
+
+10. **Prevent directory traversal in list names**
+    Lists with ../ in their names can delete files outside the app folder. Future versions will block such inputs to prevent unauthorized file access.

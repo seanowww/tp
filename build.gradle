@@ -1,23 +1,44 @@
 plugins {
     id 'java'
     id 'checkstyle'
-    id 'com.github.johnrengelman.shadow' version '7.1.2'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
     id 'application'
     id 'jacoco'
 }
 
-mainClassName = 'seedu.address.Main'
+application {
+    mainClass = 'seedu.address.Main'
+}
 
-sourceCompatibility = JavaVersion.VERSION_17
-targetCompatibility = JavaVersion.VERSION_17
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+run {
+    enableAssertions = true
+}
 
 repositories {
     mavenCentral()
     maven { url 'https://oss.sonatype.org/content/repositories/snapshots/' }
 }
 
+configurations.configureEach {
+    resolutionStrategy.force 'com.google.guava:guava:33.0.0-jre'
+}
+
+dependencies {
+    modules {
+        module('com.google.collections:google-collections') {
+            replacedBy('com.google.guava:guava', 'google-collections is obsolete; use guava')
+        }
+    }
+}
+
 checkstyle {
-    toolVersion = '11.0.0'
+    toolVersion = '10.12.7'
 }
 
 test {
@@ -42,7 +63,7 @@ task coverage(type: JacocoReport) {
 
 dependencies {
     String jUnitVersion = '5.4.0'
-    String javaFxVersion = '17.0.7'
+    String javaFxVersion = '21.0.2'
 
     implementation group: 'org.openjfx', name: 'javafx-base', version: javaFxVersion, classifier: 'win'
     implementation group: 'org.openjfx', name: 'javafx-base', version: javaFxVersion, classifier: 'mac'
@@ -63,10 +84,18 @@ dependencies {
     testImplementation group: 'org.junit.jupiter', name: 'junit-jupiter-api', version: jUnitVersion
 
     testRuntimeOnly group: 'org.junit.jupiter', name: 'junit-jupiter-engine', version: jUnitVersion
+
+    coverage.dependsOn test
+    coverage.dependsOn jacocoTestReport
 }
 
 shadowJar {
-    archiveFileName = 'addressbook.jar'
+    archiveFileName = 'ClubTrack.jar'
 }
 
 defaultTasks 'clean', 'test'
+
+run {
+    enableAssertions = true
+}
+
